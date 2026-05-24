@@ -1,0 +1,4 @@
+docker-compose up --build -d
+
+$env:PYTHONPATH="D:\C Drive\OneDrive\Desktop\Order track"; uvicorn backend_python.app.main:app --reload --port 8000
+
