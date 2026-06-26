@@ -48,6 +48,9 @@ logs/
 .coverage
 htmlcov/
 
+# Qdrant Database
+ai_bot/data/
+
 # Dependencies
 node_modules/
 package-lock.json

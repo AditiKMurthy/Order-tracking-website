@@ -27,10 +27,20 @@ redis_client = redis.Redis(
 
 # Pipeline Layer (Kafka Producer Connection)
 try:
-    producer = KafkaProducer(
-        bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
-    )
+    kafka_kwargs = {
+        "bootstrap_servers": os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+        "value_serializer": lambda v: json.dumps(v).encode('utf-8')
+    }
+    
+    # Check for SASL configuration (optional, for Cloud Kafka)
+    sasl_mechanism = os.getenv("KAFKA_SASL_MECHANISM")
+    if sasl_mechanism:
+        kafka_kwargs["security_protocol"] = os.getenv("KAFKA_SECURITY_PROTOCOL", "SASL_SSL")
+        kafka_kwargs["sasl_mechanism"] = sasl_mechanism
+        kafka_kwargs["sasl_plain_username"] = os.getenv("KAFKA_SASL_USERNAME")
+        kafka_kwargs["sasl_plain_password"] = os.getenv("KAFKA_SASL_PASSWORD")
+        
+    producer = KafkaProducer(**kafka_kwargs)
 except Exception as e:
     print(f"Warning: Kafka initialization failed: {e}")
     producer = None # Graceful degraded mode if kafka initialization fails on boot
@@ -57,14 +67,25 @@ def create_order(order_data: OrderCreate, db: Session = Depends(get_db), current
         }
         producer.send('order-events', value=event_payload)
         producer.flush()
+    else:
+        # Simulate local background processing without Kafka/Java Engine
+        from datetime import datetime, timedelta
+        new_order.status = "PROCESSED"
+        new_order.delivery_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+        db.commit()
+        db.refresh(new_order)
 
     return new_order
 
 @router.get("/{order_id}")
 def get_order_status(order_id: int, db: Session = Depends(get_db)):
-    # Feature 4: Speed Layer Lookup
-    cached_status = redis_client.get(f"order:status:{order_id}")
-    cached_date = redis_client.get(f"order:delivery:{order_id}")
+    # Feature 4: Speed Layer Lookup (Resilient)
+    try:
+        cached_status = redis_client.get(f"order:status:{order_id}")
+        cached_date = redis_client.get(f"order:delivery:{order_id}")
+    except Exception:
+        cached_status = None
+        cached_date = None
     
     if cached_status:
         return {
@@ -74,7 +95,7 @@ def get_order_status(order_id: int, db: Session = Depends(get_db)):
             "source": "Speed Layer (Redis Cache)"
         }
 
-    # Fallback to PostgreSQL
+    # Fallback to Core Database
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -83,5 +104,5 @@ def get_order_status(order_id: int, db: Session = Depends(get_db)):
         "order_id": order.id,
         "status": order.status,
         "delivery_date": order.delivery_date,
-        "source": "Core Database (Postgres)"
+        "source": "Core Database"
     }

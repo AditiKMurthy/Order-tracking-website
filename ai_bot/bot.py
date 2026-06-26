@@ -11,24 +11,11 @@ load_dotenv(dotenv_path=env_path)
 # Core Application Imports
 from backend_python.app.database import get_db
 from backend_python.app.models import Order
-from qdrant_client import QdrantClient
-
-# Get Qdrant configuration from environment
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
 
 # Absolute import from the workspace root level
-from ai_bot.vector_store import simple_embedding, COLLECTION_NAME
+from ai_bot.vector_store import simple_embedding, COLLECTION_NAME, client as qdrant_client
 
 router = APIRouter(prefix="/bot", tags=["Smart Support Bot"])
-
-# Initialize Qdrant client with optional API key
-qdrant_client = QdrantClient(
-    host=QDRANT_HOST, 
-    port=QDRANT_PORT,
-    api_key=QDRANT_API_KEY
-)
 
 @router.get("/ask")
 def ask_bot(query: str, order_id: int, db: Session = Depends(get_db)):

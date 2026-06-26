@@ -9,17 +9,44 @@ env_path = os.path.join(os.path.dirname(__file__), '../.env')
 load_dotenv(dotenv_path=env_path)
 
 # Get Qdrant configuration from environment
+QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
+QDRANT_PATH = os.getenv("QDRANT_PATH")
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "company_policies")
 
-# Initialize Qdrant client with optional API key
-client = QdrantClient(
-    host=QDRANT_HOST, 
-    port=QDRANT_PORT,
-    api_key=QDRANT_API_KEY
-)
+# Determine a local fallback path
+DEFAULT_LOCAL_PATH = os.path.join(os.path.dirname(__file__), "data/qdrant_db")
+
+# Initialize Qdrant client
+if QDRANT_URL:
+    client = QdrantClient(
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY
+    )
+elif QDRANT_PATH:
+    client = QdrantClient(
+        path=QDRANT_PATH
+    )
+else:
+    try:
+        # Try connecting to the remote Qdrant service first
+        client = QdrantClient(
+            host=QDRANT_HOST, 
+            port=QDRANT_PORT,
+            api_key=QDRANT_API_KEY,
+            timeout=2.0
+        )
+        # Verify connection by calling a fast API
+        client.get_collections()
+    except Exception:
+        # Fall back to local SQLite-backed Qdrant database
+        print(f"Warning: Could not connect to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}. "
+              f"Falling back to local on-disk storage at {DEFAULT_LOCAL_PATH}")
+        client = QdrantClient(
+            path=DEFAULT_LOCAL_PATH
+        )
 
 def simple_embedding(text: str):
     """Generates simple, deterministic mock vector embeddings based on text hashes."""

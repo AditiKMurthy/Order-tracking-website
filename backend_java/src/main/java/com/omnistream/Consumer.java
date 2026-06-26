@@ -28,6 +28,17 @@ public class Consumer {
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
+        // Optional SASL configurations for Cloud Kafka
+        String saslMechanism = System.getenv("KAFKA_SASL_MECHANISM");
+        String securityProtocol = System.getenv("KAFKA_SECURITY_PROTOCOL");
+        String saslJaasConfig = System.getenv("KAFKA_SASL_JAAS_CONFIG");
+        
+        if (saslMechanism != null && !saslMechanism.isEmpty()) {
+            props.put("security.protocol", securityProtocol != null ? securityProtocol : "SASL_SSL");
+            props.put("sasl.mechanism", saslMechanism);
+            props.put("sasl.jaas.config", saslJaasConfig);
+        }
+
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
         consumer.subscribe(Collections.singletonList("order-events"));
         return consumer;
