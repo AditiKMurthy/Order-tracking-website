@@ -11,8 +11,21 @@ public class Repository {
     private final String password;
     
     public Repository() {
-        // Get database configuration from environment variables
-        this.dbUrl = getEnv("DATABASE_URL", "jdbc:postgresql://localhost:5432/order_db");
+        // Check for DATABASE_URL first, fallback to POSTGRES_URL if set by compose
+        String rawDbUrl = System.getenv("DATABASE_URL");
+        if (rawDbUrl == null || rawDbUrl.isEmpty()) {
+            rawDbUrl = System.getenv("POSTGRES_URL");
+        }
+        if (rawDbUrl == null || rawDbUrl.isEmpty()) {
+            rawDbUrl = "jdbc:postgresql://localhost:5432/order_db";
+        }
+        
+        // Handle postgresql:// vs jdbc:postgresql:// format for JDBC
+        if (rawDbUrl.startsWith("postgresql://")) {
+            rawDbUrl = "jdbc:" + rawDbUrl;
+        }
+        this.dbUrl = rawDbUrl;
+        
         this.user = getEnv("POSTGRES_USER", "postgres");
         this.password = getEnv("POSTGRES_PASSWORD", "password");
     }

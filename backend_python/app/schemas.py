@@ -4,7 +4,24 @@ from typing import Optional
 
 class UserCreate(BaseModel):
     username: str
+    email: str
     password: str
+
+class VerifyOTP(BaseModel):
+    email: str
+    code: str
+    purpose: str  # "register" or "reset"
+
+class ForgotPassword(BaseModel):
+    email: str
+
+class ResetPassword(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str
 
 class Token(BaseModel):
     access_token: str
