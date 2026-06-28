@@ -17,19 +17,50 @@ query_params = st.query_params
 if "token" in query_params:
     st.session_state["token"] = query_params["token"]
     st.query_params.clear()
-    st.toast("Signed in with Google successfully!", icon="🔑")
+    st.toast("Signed in successfully!", icon="🔑")
     st.rerun()
+
+if "google_id_token" in query_params:
+    google_id_token = query_params["google_id_token"]
+    try:
+        response = requests.post(
+            f"{FASTAPI_URL}/auth/google-login",
+            json={"id_token": google_id_token}
+        )
+        if response.status_code == 200:
+            st.session_state["token"] = response.json().get("access_token")
+            st.toast("Signed in with Google successfully!", icon="🔑")
+        else:
+            st.error(f"Google login failed: {response.text}")
+    except Exception as e:
+        st.error(f"Error reaching authentication backend: {e}")
+    st.query_params.clear()
+    st.rerun()
+
+# Background helper to catch ID token from Google OAuth redirect URL hash fragment
+components.html("""
+<script>
+    if (window.parent.location.hash) {
+        var hash = window.parent.location.hash;
+        var tokenMatch = hash.match(/id_token=([^&]+)/);
+        if (tokenMatch && tokenMatch[1]) {
+            // Forward the id_token as a query parameter and reload parent page
+            window.parent.location.href = window.parent.location.origin + window.parent.location.pathname + "?google_id_token=" + tokenMatch[1];
+        }
+    }
+</script>
+""", height=0)
 
 # Initialize session state for theme
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "Dark"
+    st.session_state["theme"] = "System Default"
 
 # Theme selector at the very top of the sidebar
 st.sidebar.markdown("### 🎨 Theme Settings")
 selected_theme = st.sidebar.selectbox(
     "Choose Mode",
-    ["Dark", "Light"],
-    index=0 if st.session_state["theme"] == "Dark" else 1,
+    ["System Default", "Dark", "Light"],
+    index=0 if st.session_state["theme"] == "System Default" else (1 if st.session_state["theme"] == "Dark" else 2),
     key="theme_selector"
 )
 st.session_state["theme"] = selected_theme
@@ -49,7 +80,7 @@ if st.session_state["theme"] == "Dark":
     google_btn_color = "#e0e6ed"
     google_btn_border = "rgba(255, 255, 255, 0.15)"
     google_btn_hover = "#242936"
-else:
+elif st.session_state["theme"] == "Light":
     theme_css = """
     :root {
         --st-background-color: #ffffff !important;
@@ -63,6 +94,22 @@ else:
     google_btn_color = "#1f1f1f"
     google_btn_border = "#dadce0"
     google_btn_hover = "#f8f9fa"
+else:
+    # System Default (Dynamic preference detection via CSS media queries)
+    theme_css = """
+    :root {
+        --card-border: rgba(128, 128, 128, 0.25) !important;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --card-border: rgba(255, 255, 255, 0.15) !important;
+        }
+    }
+    """
+    google_btn_bg = "var(--st-secondary-background-color)"
+    google_btn_color = "var(--st-text-color)"
+    google_btn_border = "var(--card-border)"
+    google_btn_hover = "rgba(128, 128, 128, 0.1)"
 
 # Inject custom CSS for premium UI styling and theme compliance
 st.markdown(f"""
@@ -71,15 +118,15 @@ st.markdown(f"""
 
 /* 1. Global Page Aesthetics & Theme Integration */
 .stApp {{
-    background-color: var(--st-background-color) !important;
-    color: var(--st-text-color) !important;
+    background-color: var(--st-background-color, var(--background-color, #ffffff)) !important;
+    color: var(--st-text-color, var(--text-color, #31333F)) !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }}
 
 /* Seamless Sidebar background matching the main page */
 section[data-testid="stSidebar"] {{
-    background-color: var(--st-background-color) !important;
-    border-right: 1px solid var(--card-border) !important;
+    background-color: var(--st-background-color, var(--background-color, #ffffff)) !important;
+    border-right: 1px solid var(--card-border, rgba(128, 128, 128, 0.2)) !important;
 }}
 
 /* Sidebar inner content padding to prevent cramped spacing */
@@ -97,7 +144,7 @@ h1 {{
 
 /* 2. Form Control Labels Contrast Fixes */
 label, [data-testid="stWidgetLabel"] p {{
-    color: var(--st-text-color) !important;
+    color: var(--st-text-color, var(--text-color, #31333F)) !important;
     font-weight: 600 !important;
     font-size: 0.95rem !important;
     letter-spacing: 0.015em;
@@ -108,22 +155,22 @@ label, [data-testid="stWidgetLabel"] p {{
 /* 3. Text inputs visual improvements */
 div[data-testid="stTextInput"] input {{
     border-radius: 8px !important;
-    border: 1px solid var(--card-border) !important;
-    background-color: var(--st-secondary-background-color) !important;
-    color: var(--st-text-color) !important;
+    border: 1px solid var(--card-border, rgba(128, 128, 128, 0.2)) !important;
+    background-color: var(--st-secondary-background-color, var(--secondary-background-color, #f0f2f6)) !important;
+    color: var(--st-text-color, var(--text-color, #31333F)) !important;
     padding: 0.5rem 0.75rem !important;
     transition: border-color 0.2s, box-shadow 0.2s;
 }}
 div[data-testid="stTextInput"] input:focus {{
-    border-color: var(--st-primary-color) !important;
+    border-color: var(--st-primary-color, var(--primary-color, #ff4b4b)) !important;
     box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.15) !important;
 }}
 
 /* 4. Button Styling with dynamic text adjustment */
 div.stButton > button {{
-    color: var(--st-text-color) !important;
-    background-color: var(--st-secondary-background-color) !important;
-    border: 1px solid var(--card-border) !important;
+    color: var(--st-text-color, var(--text-color, #31333F)) !important;
+    background-color: var(--st-secondary-background-color, var(--secondary-background-color, #f0f2f6)) !important;
+    border: 1px solid var(--card-border, rgba(128, 128, 128, 0.2)) !important;
     border-radius: 8px !important;
     padding: 0.5rem 1rem !important;
     font-weight: 500 !important;
@@ -131,16 +178,16 @@ div.stButton > button {{
     width: 100%;
 }}
 div.stButton > button:hover {{
-    border-color: var(--st-primary-color) !important;
-    color: var(--st-primary-color) !important;
-    background-color: var(--st-background-color) !important;
+    border-color: var(--st-primary-color, var(--primary-color, #ff4b4b)) !important;
+    color: var(--st-primary-color, var(--primary-color, #ff4b4b)) !important;
+    background-color: var(--st-background-color, var(--background-color, #ffffff)) !important;
 }}
 
 /* Primary Button Styling */
 div.stButton > button[kind="primary"] {{
-    background-color: var(--st-primary-color) !important;
+    background-color: var(--st-primary-color, var(--primary-color, #ff4b4b)) !important;
     color: #ffffff !important; /* Force high-contrast white text for primary actions */
-    border: 1px solid var(--st-primary-color) !important;
+    border: 1px solid var(--st-primary-color, var(--primary-color, #ff4b4b)) !important;
     font-weight: 600 !important;
 }}
 div.stButton > button[kind="primary"]:hover {{
@@ -151,10 +198,10 @@ div.stButton > button[kind="primary"]:hover {{
 
 /* 5. Custom Card Styling for Container Layouts */
 div[data-testid="stVerticalBlockBorderWrapper"] {{
-    border: 1px solid var(--card-border) !important;
+    border: 1px solid var(--card-border, rgba(128, 128, 128, 0.2)) !important;
     border-radius: 8px !important;
     padding: 1.75rem !important;
-    background-color: var(--st-secondary-background-color) !important;
+    background-color: var(--st-secondary-background-color, var(--secondary-background-color, #f0f2f6)) !important;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
     margin-bottom: 1.5rem !important;
 }}
@@ -168,8 +215,8 @@ iframe[title="streamlit_components.v1.html"] {{
 
 /* Password eye toggle buttons alignment */
 div[data-testid="column"] button {{
-    border: 1px solid var(--card-border) !important;
-    background-color: var(--st-secondary-background-color) !important;
+    border: 1px solid var(--card-border, rgba(128, 128, 128, 0.2)) !important;
+    background-color: var(--st-secondary-background-color, var(--secondary-background-color, #f0f2f6)) !important;
     border-radius: 6px !important;
     height: 40px !important;
     margin-top: 28px !important;
@@ -362,54 +409,34 @@ if st.session_state["token"] is None:
             """.replace("{FASTAPI_CLIENT_URL}", FASTAPI_CLIENT_URL).replace("{GOOGLE_BTN_BG}", google_btn_bg).replace("{GOOGLE_BTN_COLOR}", google_btn_color).replace("{GOOGLE_BTN_BORDER}", google_btn_border).replace("{GOOGLE_BTN_HOVER}", google_btn_hover)
             components.html(mock_html, height=50)
         else:
-            # Render Real Google Button
-            google_html = """
-            <script src="https://accounts.google.com/gsi/client" async defer></script>
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    background: transparent;
-                }
-            </style>
-            <div id="g_id_onload"
-                 data-client_id="{GOOGLE_CLIENT_ID}"
-                 data-context="signin"
-                 data-ux_mode="popup"
-                 data-callback="handleCredentialResponse"
-                 data-auto_prompt="false">
-            </div>
-            <div class="g_id_signin"
-                 data-type="standard"
-                 data-shape="rectangular"
-                 data-theme="outline"
-                 data-text="signin_with"
-                 data-size="large"
-                 data-logo_alignment="left"
-                 style="width: 100%;">
-            </div>
-            <script>
-                function handleCredentialResponse(response) {
-                    fetch("{FASTAPI_CLIENT_URL}/auth/google-login", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ id_token: response.credential })
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.access_token) {
-                            window.parent.location.href = window.parent.location.origin + window.parent.location.pathname + "?token=" + data.access_token;
-                        } else {
-                            alert("Google auth failed on backend");
-                        }
-                    })
-                    .catch(err => alert("Error connecting to backend: " + err));
-                }
-            </script>
-            """.replace("{FASTAPI_CLIENT_URL}", FASTAPI_CLIENT_URL).replace("{GOOGLE_CLIENT_ID}", GOOGLE_CLIENT_ID)
-            components.html(google_html, height=50)
+            # Render Real Google Button using standard secure parent redirect
+            google_oauth_url = (
+                f"https://accounts.google.com/o/oauth2/v2/auth?"
+                f"client_id={GOOGLE_CLIENT_ID}&"
+                f"redirect_uri=http://localhost:8501&"
+                f"response_type=id_token&"
+                f"scope=openid%20email%20profile&"
+                f"nonce=omnistream_nonce&"
+                f"prompt=select_account"
+            )
+            
+            google_btn_html = f"""
+            <a href="{google_oauth_url}" target="_parent" style="text-decoration: none; display: block; width: 100%;">
+                <div style="display: flex; align-items: center; justify-content: center; background-color: {google_btn_bg}; color: {google_btn_color}; border: 1px solid {google_btn_border}; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s;">
+                    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="18px" height="18px" viewBox="0 0 48 48" style="margin-right: 10px; display: block; flex-shrink: 0;">
+                        <g>
+                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                            <path fill="#4285F4" d="M46.5 24c0-1.61-.15-3.16-.42-4.69H24v8.89h12.63c-.55 2.89-2.18 5.33-4.62 6.96l7.18 5.56C43.43 36.27 46.5 30.73 46.5 24z"></path>
+                            <path fill="#FBBC05" d="M10.54 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.98-6.19z"></path>
+                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.18-5.56c-2.03 1.36-4.63 2.17-8.71 2.17-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                            <polygon points="0 0 48 0 48 48 0 48" fill="none"></polygon>
+                        </g>
+                    </svg>
+                    Sign in with Google
+                </div>
+            </a>
+            """
+            st.markdown(google_btn_html, unsafe_allow_html=True)
 
     # ------------------
     # FLOW: VERIFY REGISTRATION OTP
@@ -523,6 +550,30 @@ if st.session_state["token"] is None:
 # If ALREADY logged in, show authenticated state
 else:
     st.sidebar.success("🔑 Authenticated Successfully")
+    
+    # Fetch user profile details
+    try:
+        headers = {"Authorization": f"Bearer {st.session_state['token']}"}
+        me_response = requests.get(f"{FASTAPI_URL}/auth/me", headers=headers)
+        if me_response.status_code == 200:
+            user_data = me_response.json()
+            username = user_data.get("username", "N/A")
+            email = user_data.get("email", "N/A")
+            is_verified = user_data.get("is_verified", False)
+            
+            st.sidebar.markdown("### 👤 User Profile")
+            with st.sidebar.container(border=True):
+                st.markdown(f"**Username:** {username}")
+                st.markdown(f"**Email:** {email}")
+                if is_verified:
+                    st.markdown("✅ **Status:** Verified Profile")
+                else:
+                    st.markdown("⚠️ **Status:** Unverified Profile")
+        else:
+            st.sidebar.warning("Could not fetch complete user profile.")
+    except Exception as e:
+        st.sidebar.warning(f"Profile API unreachable: {e}")
+        
     st.sidebar.caption(f"Token: {st.session_state['token'][:20]}...") 
     
     if st.sidebar.button("Logout", use_container_width=True):

@@ -335,3 +335,11 @@ def google_login(login_data: GoogleLoginRequest, db: Session = Depends(get_db)):
     # Generate token
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "username": current_user.username,
+        "email": current_user.email,
+        "is_verified": current_user.is_verified
+    }
